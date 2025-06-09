@@ -198,7 +198,23 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard{
         address pilTemplate,
         address royaltyPolicyLAP,
         address wip
+    ){
+        IP_ASSET_REGISTRY = IIPAssetRegistry(ipAssetRegistry);
+        LICENSING_MODULE = ILicensingModule(licensingModule);
+        PIL_TEMPLATE = IPILicenseTemplate(pilTemplate);
+        ROYALTY_POLICY_LAP = royaltyPolicyLAP;
+        WIP = wip;
+        
+        ASSET_NFT = new AssetNFT();
+        platformOwner = msg.sender;
+    }
+    modifier onlyPlatformOwner() {
+        require(msg.sender == platformOwner, "Only platform owner");
+        _;
+    }
+
+    function createAssest(
+        
     )
-    
 
 }
