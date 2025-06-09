@@ -146,6 +146,28 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard{
     enum AssetType { MUSIC, POETRY, DANCE, ART, VIDEO, WRITING, CODE, OTHER }
     enum VerificationStatus { PENDING, VERIFIED, REJECTED }
 
+    function _assetTypeToString(AssetType assetType) internal pure returns (string memory) {
+    if (assetType == AssetType.MUSIC) {
+        return "Music";
+    } else if (assetType == AssetType.POETRY) {
+        return "Poetry";
+    } else if (assetType == AssetType.DANCE) {
+        return "Dance";
+    } else if (assetType == AssetType.ART) {
+        return "Art";
+    } else if (assetType == AssetType.VIDEO) {
+        return "Video";
+    } else if (assetType == AssetType.WRITING) {
+        return "Writing";
+    } else if (assetType == AssetType.CODE) {
+        return "Code";
+    } else if (assetType == AssetType.OTHER) {
+        return "Other";
+    } else {
+        return "Unknown";
+    }
+}
+
     struct Asset {
         uint256 nftTokenId;
         address ipId;
@@ -175,8 +197,8 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard{
         uint256 assetsCreated;
         bool isVerified;
     }
-    unit256 private _assetCounter;
-    mapping(unit256=> Asset) public assets;
+    uint256 private _assetCounter;
+    mapping(uint256=> Asset) public assets;
     mapping(address => CreatorProfile) public creators;
     mapping(uint256 => RoyaltyDistribution[]) public royaltyDistributions;
     mapping(uint256 => uint256) public assetRoyaltyBalance;
@@ -212,9 +234,70 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard{
         require(msg.sender == platformOwner, "Only platform owner");
         _;
     }
-
+  
     function createAssest(
+        AssetType assetType,
+        string memory title,
+        string memory description,
+        string memory metadataURI,
+        uint256 creatorSharesPercent, 
+        uint256 pricePerShare,
+        uint256 commercialRevSharePercent 
+    )external returns (uint256 assetId){
+        require(creatorSharesPercent <= 9000, "Creator cannot own more than 90%");
+        require(creatorSharesPercent >= 1000, "Creator must own at least 10%");
+
+        assetId = _assetCounter++;
+        string memory nftMetadata = string(abi.encodePacked(
+            "Asset: ", title, " | Type: ", _assetTypeToString(assetType)
+        ));
+        uint256 nftTokenId = ASSET_NFT.mint(address(this), nftMetadata);
+
+        address ipId = IP_ASSET_REGISTRY.register(block.chainid, address(ASSET_NFT), nftTokenId);
+        require(commercialRevSharePercent * 1_000_000 <= type(uint32).max, "Commercial rev share too large");
+        uint32 commercialRevShare = uint32(commercialRevSharePercent * 1_000_000);
+        uint256 licenseTermsId = PIL_TEMPLATE.registerLicenseTerms(
+            PILFlavors.commercialRemix({
+                mintingFee: 0,
+                commercialRevShare: commercialRevShare,
+                royaltyPolicy: ROYALTY_POLICY_LAP,
+                currencyToken: WIP
+            })
+        );
         
-    )
+        LICENSING_MODULE.attachLicenseTerms(ipId, address(PIL_TEMPLATE), licenseTermsId);
+        string memory shareTokenName = string(abi.encodePacked(title, " Shares"));
+        string memory shareTokenSymbol = string(abi.encodePacked("$", _assetTypeToString(assetType)));
+
+        AssetShareToken shareToken = new AssetShareToken(
+            shareTokenName,
+            shareTokenSymbol,
+            msg.sender,
+            assetId,
+            creatorSharesPercent,
+            pricePerShare
+        );
+
+        assets[assetId] = Asset({
+            nftTokenId: nftTokenId,
+            ipId: ipId,
+            licenseTermsId: licenseTermsId,
+            creator: msg.sender,
+            assetType: assetType,
+            title: title,
+            description: description,
+            metadataURI: metadataURI,
+            shareTokenAddress: address(shareToken),
+            totalRoyaltiesCollected: 0,
+            exists: true,
+            verificationStatus: VerificationStatus.PENDING
+        });
+
+        creators[msg.sender].wallet = msg.sender;
+        creators[msg.sender].assetsCreated++;
+        
+        emit AssetCreated(assetId, msg.sender, assetType, title);
+    }
+    
 
 }
