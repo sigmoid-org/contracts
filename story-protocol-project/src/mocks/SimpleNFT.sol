@@ -298,6 +298,15 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard{
         
         emit AssetCreated(assetId, msg.sender, assetType, title);
     }
+    function buyAssetShares(uint256 assetId, uint256 shareAmount) external payable nonReentrant {
+        require(assets[assetId].exists, "Asset does not exist");
+        
+        AssetShareToken shareToken = AssetShareToken(assets[assetId].shareTokenAddress);
+        shareToken.buyShares{value: msg.value}(shareAmount);
+        
+        emit SharesPurchased(assetId, msg.sender, shareAmount, msg.value);
+    }
+    
     
 
 }
