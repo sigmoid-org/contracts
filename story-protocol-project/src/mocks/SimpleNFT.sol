@@ -134,3 +134,11 @@ contract AssetShareToken is ERC20, Ownable{
         return allocation.publicShares;
     }
 }
+
+contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard{
+    IIPAssetRegistry public immutable IP_ASSET_REGISTRY;
+    ILicensingModule public immutable LICENSING_MODULE;
+    IPILicenseTemplate public immutable PIL_TEMPLATE;
+    address public immutable ROYALTY_POLICY_LAP;
+    address public immutable WIP;
+}
