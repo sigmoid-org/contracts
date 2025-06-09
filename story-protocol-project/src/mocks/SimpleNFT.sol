@@ -141,4 +141,39 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard{
     IPILicenseTemplate public immutable PIL_TEMPLATE;
     address public immutable ROYALTY_POLICY_LAP;
     address public immutable WIP;
+
+    AssetNFT public immutable ASSET_NFT;
+    enum AssetType { MUSIC, POETRY, DANCE, ART, VIDEO, WRITING, CODE, OTHER }
+    enum VerificationStatus { PENDING, VERIFIED, REJECTED }
+
+    struct Asset {
+        uint256 nftTokenId;
+        address ipId;
+        uint256 licenseTermsId;
+        address creator;
+        AssetType assetType;
+        string title;
+        string description;
+        string metadataURI;
+        address shareTokenAddress;
+        uint256 totalRoyaltiesCollected;
+        bool exists;
+        VerificationStatus verificationStatus;
+    }
+    struct RoyaltyDistribution {
+        uint256 totalAmount;
+        uint256 timestamp;
+        mapping(address => uint256) claimedAmounts;
+        address[] shareholders;
+        uint256[] shareAmounts;
+    }
+    
+    struct CreatorProfile {
+        address wallet;
+        string[] verifiedPlatforms;
+        mapping(string => bool) platformVerified;
+        uint256 assetsCreated;
+        bool isVerified;
+    }
+
 }
