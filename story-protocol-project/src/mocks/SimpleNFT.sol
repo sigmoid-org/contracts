@@ -1,10 +1,67 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
+import { IIPAssetRegistry } from "@storyprotocol/core/interfaces/registries/IIPAssetRegistry.sol";
+import { ILicensingModule } from "@storyprotocol/core/interfaces/modules/licensing/ILicensingModule.sol";
+import { IPILicenseTemplate } from "@storyprotocol/core/interfaces/modules/licensing/IPILicenseTemplate.sol";
+import { PILFlavors } from "@storyprotocol/core/lib/PILFlavors.sol";
+import { ERC721Holder } from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol" ;   
 
+contract AssetNFT is ERC721Holder {
+    uint256 private _tokenCounter;
+    string public name = "Universal Asset NFT";
+    string public symbol = "UANFT";
+    
+    mapping(uint256 => string) private _tokenURIs;
+    mapping(uint256 => address) private _owners;
+    mapping(uint256 => address) private _tokenApprovals;
+    mapping(address => mapping(address => bool)) private _operatorApprovals;
+    
+    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+    event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
+    
+    function mint(address to, string memory tokenURI) external returns (uint256) {
+        uint256 tokenId = _tokenCounter++;
+        _owners[tokenId] = to;
+        _tokenURIs[tokenId] = tokenURI;
+        emit Transfer(address(0), to, tokenId);
+        return tokenId;
+    }
+    
+    function nextTokenId() external view returns (uint256) {
+        return _tokenCounter;
+    }
+    
+    function ownerOf(uint256 tokenId) external view returns (address) {
+        return _owners[tokenId];
+    }
+    
+    function transferFrom(address from, address to, uint256 tokenId) external {
+        require(_isApprovedOrOwner(msg.sender, tokenId), "Not approved");
+        require(_owners[tokenId] == from, "Wrong owner");
+        
+        _owners[tokenId] = to;
+        delete _tokenApprovals[tokenId];
+        emit Transfer(from, to, tokenId);
+    }
+    
+    function approve(address to, uint256 tokenId) external {
+        require(_owners[tokenId] == msg.sender, "Not owner");
+        _tokenApprovals[tokenId] = to;
+        emit Approval(msg.sender, to, tokenId);
+    }
+    
+    function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns (bool) {
+        address owner = _owners[tokenId];
+        return (spender == owner || _tokenApprovals[tokenId] == spender || _operatorApprovals[owner][spender]);
+    }
+    
+    function tokenURI(uint256 tokenId) external view returns (string memory) {
+        return _tokenURIs[tokenId];
+    }
+}
