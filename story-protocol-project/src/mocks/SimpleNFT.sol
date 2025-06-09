@@ -306,7 +306,39 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard{
         
         emit SharesPurchased(assetId, msg.sender, shareAmount, msg.value);
     }
-    
+    function depositRoyalties(uint256 assetId) external payable nonReentrant {
+        require(assets[assetId].exists, "Asset does not exist");
+        require(msg.value > 0, "Must deposit some amount");
+        
+        uint256 platformFee = (msg.value * platformFeePercent) / 10000;
+        uint256 royaltyAmount = msg.value - platformFee;
+        
+        assetRoyaltyBalance[assetId] += royaltyAmount;
+        assets[assetId].totalRoyaltiesCollected += royaltyAmount;
+        
+        
+        if (platformFee > 0) {
+            payable(platformOwner).transfer(platformFee);
+        }
+        
+        emit RoyaltiesDeposited(assetId, royaltyAmount);
+    }
+    function distributeRoyalties(uint256 assetId) external nonReentrant {
+        require(assets[assetId].exists, "Asset does not exist");
+        require(assetRoyaltyBalance[assetId] > 0, "No royalties to distribute");
+        
+        AssetShareToken shareToken = AssetShareToken(assets[assetId].shareTokenAddress);
+        uint256 totalSupply = shareToken.totalSupply();
+        uint256 distributionAmount = assetRoyaltyBalance[assetId];
+        
+        
+        uint256 distributionIndex = royaltyDistributions[assetId].length;
+        
+        // Reset balance
+        assetRoyaltyBalance[assetId] = 0;
+        
+        
+    }   
     
 
 }
