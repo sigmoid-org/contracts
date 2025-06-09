@@ -96,6 +96,41 @@ contract AssetShareToken is ERC20, Ownable{
         
         uint256 creatorShares = (TOTAL_SHARES * creatorSharesPercent) / 10000;
         uint256 publicShares = TOTAL_SHARES - creatorShares;
+
+        allocation = ShareAllocation({
+            creatorShares: creatorShares,
+            publicShares: publicShares,
+            pricePerShare: pricePerShare,
+            saleActive: true
+        });
         
+        
+        _mint(creator, creatorShares);
+        
+    }
+    function buyShares(uint256 shareAmount) external payable {
+        require(allocation.saleActive, "Sale not active");
+        require(shareAmount > 0, "Must buy at least 1 share");
+        require(shareAmount <= allocation.publicShares, "Not enough shares available");
+        require(msg.value >= shareAmount * allocation.pricePerShare, "Insufficient payment");
+        
+        allocation.publicShares -= shareAmount;
+        _mint(msg.sender, shareAmount);
+        
+        
+        if (msg.value > shareAmount * allocation.pricePerShare) {
+            payable(msg.sender).transfer(msg.value - (shareAmount * allocation.pricePerShare));
+        }
+    }
+    function toggleSale() external onlyOwner {
+        allocation.saleActive = !allocation.saleActive;
+    }
+    
+    function updatePrice(uint256 newPrice) external onlyOwner {
+        allocation.pricePerShare = newPrice;
+    }
+    
+    function getRemainingShares() external view returns (uint256) {
+        return allocation.publicShares;
     }
 }
