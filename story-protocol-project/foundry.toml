@@ -1,5 +1,6 @@
 [profile.default]
 out = 'out'
+via_ir = true
 libs = ['node_modules', 'lib']
 cache_path  = 'forge-cache'
 gas_reports = ["*"]
