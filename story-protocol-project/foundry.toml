@@ -1,4 +1,5 @@
 [profile.default]
+ffi = true
 out = 'out'
 via_ir = true
 libs = ['node_modules', 'lib']
@@ -8,7 +9,11 @@ optimizer = true
 optimizer_runs = 20000
 test = 'test'
 solc = '0.8.26'
-fs_permissions = [{ access = 'read', path = './out' }, { access = 'read-write', path = './deploy-out' }]
+fs_permissions = [
+  { access = 'read', path = './out' },
+  { access = 'read-write', path = './deploy-out' },
+  { access = 'read-write', path = './deployments.json' }
+]
 evm_version = 'cancun'
 remappings = [
     '@openzeppelin/=node_modules/@openzeppelin/',
