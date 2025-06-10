@@ -41,8 +41,9 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         uint256 totalRoyaltiesCollected;
         bool exists;
         VerificationStatus verificationStatus;
+        uint256 yes_votes;
+        uint256 no_votes;
     }
-
 
     struct RoyaltyDistribution {
         uint256 totalAmount;
@@ -67,6 +68,10 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     mapping(address => CreatorProfile) public creators;
     mapping(uint256 => RoyaltyDistribution[]) public royaltyDistributions;
     mapping(uint256 => uint256) public assetRoyaltyBalance;
+    mapping(uint256 => mapping(address => bool)) private assetToAddressToVote;
+    mapping(uint256 => address[]) public assetToVerifiers;
+    mapping(address => address[]) public addressToReporters;
+    mapping(address => address[]) public addressToReported;
 
     address public platformOwner;
     uint256 public platformFeePercent = 500;    
@@ -167,7 +172,9 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
             shareTokenAddress: address(shareToken),
             totalRoyaltiesCollected: 0,
             exists: true,
-            verificationStatus: VerificationStatus.PENDING
+            verificationStatus: VerificationStatus.PENDING,
+            yes_votes: 0,
+            no_votes: 0
         });
 
         creators[msg.sender].wallet = msg.sender;
@@ -261,9 +268,12 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         emit AssetVerificationUpdated(assetId, status);
     }
     
-    function getAsset(uint256 assetId) external view returns (Asset memory) {
+    function getAsset(uint256 assetId) external view returns (Asset memory, address[] memory verifiers) {
         require(assets[assetId].exists, "Asset does not exist");
-        return assets[assetId];
+        
+        address[] memory verifiers = assetToVerifiers[assetId];
+
+        return (assets[assetId],verifiers); 
     }
     
     function getCreatorAssets(address creator) external view returns (uint256[] memory) {
@@ -346,6 +356,18 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         creators[msg.sender].bio = _bio;
     }
 
+    function voteOnAsset(uint256 assetId, bool vote) external {
+        if(assetToAddressToVote[assetId][msg.sender] == true) return;
+        require(assets[assetId].exists, "Asset does not exist");
+        if(vote) {
+            assets[assetId].yes_votes++;
+        } else {
+            assets[assetId].no_votes++;
+        }
+        assetToAddressToVote[assetId][msg.sender] = true;
+        assetToVerifiers[assetId].push(msg.sender);
+    }
+
     function registerCreator(
         string memory _name, 
         string memory _profilephotoIPFS, 
@@ -367,19 +389,32 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         string memory name,
         string memory photo,
         string memory bio,
-        bool isVerified
+        bool isVerified,
+        address[] memory reportersArray
     ) {
+        address[] memory reporters = addressToReporters[creator];
         CreatorProfile storage profile = creators[creator];
         return (
             profile.platformName,
             profile.profilephotoIPFS,
             profile.bio,
-            profile.isVerified
+            profile.isVerified,
+            reporters
         );
     }
 
     function isPlatformVerified(address creator, string memory platform) external view returns (bool) {
         return creators[creator].platformVerified[platform];
+    }
+
+    function reportUser(address user) external {
+        for(uint256 i = 0; i < addressToReporters[msg.sender].length; i++) {
+            if(addressToReporters[msg.sender][i] == user) {
+                return;
+            }
+        }
+        addressToReported[msg.sender].push(user);
+        addressToReporters[user].push(msg.sender);
     }
 
     function pause() external onlyPlatformOwner {

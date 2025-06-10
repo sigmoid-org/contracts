@@ -65,7 +65,7 @@ contract UniversalAssetTokenizationPlatformTest is Test {
         vm.stopPrank();
         
         // Verify asset was created correctly
-        UniversalAssetTokenizationPlatform.Asset memory asset = platform.getAsset(assetId);
+        (UniversalAssetTokenizationPlatform.Asset memory asset,  )= platform.getAsset(assetId);
         
         assertEq(uint256(asset.assetType), uint256(UniversalAssetTokenizationPlatform.AssetType.MUSIC));
         assertEq(asset.title, "My First Song");
@@ -135,7 +135,7 @@ contract UniversalAssetTokenizationPlatformTest is Test {
                 10 // 10% commercial revenue share
             );
             
-            UniversalAssetTokenizationPlatform.Asset memory asset = platform.getAsset(assetId);
+            (UniversalAssetTokenizationPlatform.Asset memory asset,  )= platform.getAsset(assetId);
             assertEq(uint256(asset.assetType), uint256(assetTypes[i]));
             assertEq(asset.title, titles[i]);
         }
@@ -165,7 +165,7 @@ contract UniversalAssetTokenizationPlatformTest is Test {
             1 // 1% commercial revenue share
         );
         
-        UniversalAssetTokenizationPlatform.Asset memory asset1 = platform.getAsset(assetId1);
+        (UniversalAssetTokenizationPlatform.Asset memory asset1,) = platform.getAsset(assetId1);
         AssetShareToken shareToken1 = AssetShareToken(asset1.shareTokenAddress);
         assertEq(shareToken1.balanceOf(alice), 1000); // 10% of 10000 total shares
         
@@ -180,7 +180,7 @@ contract UniversalAssetTokenizationPlatformTest is Test {
             100 // 100% commercial revenue share - maximum
         );
         
-        UniversalAssetTokenizationPlatform.Asset memory asset2 = platform.getAsset(assetId2);
+        (UniversalAssetTokenizationPlatform.Asset memory asset2,) = platform.getAsset(assetId2);
         AssetShareToken shareToken2 = AssetShareToken(asset2.shareTokenAddress);
         assertEq(shareToken2.balanceOf(alice), 9000); // 90% of 10000 total shares
         (uint256 creatorShares, uint256 publicShares, , ) = shareToken2.allocation();
@@ -285,8 +285,8 @@ contract UniversalAssetTokenizationPlatformTest is Test {
         vm.stopPrank();
         
         // Verify both assets exist and have correct creators
-        UniversalAssetTokenizationPlatform.Asset memory aliceAsset = platform.getAsset(aliceAssetId);
-        UniversalAssetTokenizationPlatform.Asset memory bobAsset = platform.getAsset(bobAssetId);
+        (UniversalAssetTokenizationPlatform.Asset memory aliceAsset,) = platform.getAsset(aliceAssetId);
+        (UniversalAssetTokenizationPlatform.Asset memory bobAsset,) = platform.getAsset(bobAssetId);
         
         assertEq(aliceAsset.creator, alice);
         assertEq(bobAsset.creator, bob);
@@ -319,7 +319,7 @@ contract UniversalAssetTokenizationPlatformTest is Test {
         
         vm.stopPrank();
         
-        UniversalAssetTokenizationPlatform.Asset memory asset = platform.getAsset(assetId);
+        (UniversalAssetTokenizationPlatform.Asset memory asset,) = platform.getAsset(assetId);
         AssetShareToken shareToken = AssetShareToken(asset.shareTokenAddress);
         
         // Verify share token properties
