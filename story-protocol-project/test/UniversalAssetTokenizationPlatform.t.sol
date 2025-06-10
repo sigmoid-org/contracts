@@ -6,10 +6,13 @@ import { MockIPGraph } from "@storyprotocol/test/mocks/MockIPGraph.sol";
 import { IIPAssetRegistry } from "@storyprotocol/core/interfaces/registries/IIPAssetRegistry.sol";
 import { ILicenseRegistry } from "@storyprotocol/core/interfaces/registries/ILicenseRegistry.sol";
 
-import { UniversalAssetTokenizationPlatform, AssetNFT, AssetShareToken } from "../src/mocks/SimpleNFT.sol";
+import { UniversalAssetTokenizationPlatform } from "../src/UniversalAssetTokenisationPlatform.sol";
+import { AssetNFT } from "../src/AssetNFT.sol";
+import { AssetShareToken } from "../src/AssetShareToken.sol";
 
 // Run this test:
 // forge test --fork-url https://aeneid.storyrpc.io/ --match-path test/UniversalAssetTokenizationPlatformTest.t.sol
+
 contract UniversalAssetTokenizationPlatformTest is Test {
     address internal alice = address(0xa11ce);
     address internal bob = address(0xb0b);
@@ -141,7 +144,7 @@ contract UniversalAssetTokenizationPlatformTest is Test {
         
         // Verify creator profile updated - only non-array/mapping fields are returned
         // CreatorProfile: wallet, assetsCreated, isVerified, verificationStatus
-        (address wallet, uint256 assetsCreated, bool isVerified, UniversalAssetTokenizationPlatform.VerificationStatus verificationStatus) = platform.creators(alice);
+        (address wallet, uint256 assetsCreated, bool isVerified, UniversalAssetTokenizationPlatform.VerificationStatus verificationStatus,string memory profilephotoIPFS ,string memory bio, string memory platformName) = platform.creators(alice);
         assertEq(wallet, alice);
         assertEq(assetsCreated, 8);
         assertFalse(isVerified); // Not verified by default
@@ -291,8 +294,8 @@ contract UniversalAssetTokenizationPlatformTest is Test {
         assertEq(bobAsset.title, "Bob's Art");
         
         // Verify creator profiles
-        (, uint256 aliceAssetsCreated, , ) = platform.creators(alice);
-        (, uint256 bobAssetsCreated, , ) = platform.creators(bob);
+        (, uint256 aliceAssetsCreated, , , , , ) = platform.creators(alice);
+        (, uint256 bobAssetsCreated, , , , , ) = platform.creators(bob);
         assertEq(aliceAssetsCreated, 1);
         assertEq(bobAssetsCreated, 1);
         

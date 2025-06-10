@@ -1,3 +1,4 @@
+
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
@@ -12,106 +13,9 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
-contract AssetNFT is ERC721, Ownable {
-    uint256 private _tokenCounter;
-    mapping(uint256 => string) private _tokenURIs;
-    
-    constructor() ERC721("Universal Asset NFT", "UANFT") Ownable(msg.sender) {
-        _tokenCounter = 0;
-    }
-    
-    function mint(address to, string memory tokenURI) external onlyOwner returns (uint256) {
-        uint256 tokenId = _tokenCounter;
-        _tokenCounter++;
-        
-        _mint(to, tokenId);
-        _tokenURIs[tokenId] = tokenURI;
-        
-        return tokenId;
-    }
-    
-    function nextTokenId() external view returns (uint256) {
-        return _tokenCounter;
-    }
-    
-    function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        require(_ownerOf(tokenId) != address(0), "Token does not exist");
-        return _tokenURIs[tokenId];
-    }
-    
-    function _setTokenURI(uint256 tokenId, string memory uri) internal {
-        _tokenURIs[tokenId] = uri;
-    }
-}
+import "./AssetNFT.sol";
+import "./AssetShareToken.sol";
 
-contract AssetShareToken is ERC20, Ownable {
-    address public immutable PLATFORM;
-    uint256 public immutable ASSET_ID;
-    uint256 public constant TOTAL_SHARES = 10000;
-
-    struct ShareAllocation {
-        uint256 creatorShares;
-        uint256 publicShares;
-        uint256 pricePerShare;
-        bool saleActive;
-    }
-    ShareAllocation public allocation;
-
-    modifier onlyPlatform() {
-        require(msg.sender == PLATFORM, "Only platform");
-        _;
-    }
-
-    constructor(
-        string memory name,
-        string memory symbol,
-        address creator,
-        uint256 assetId,
-        uint256 creatorSharesPercent,
-        uint256 pricePerShare
-    ) ERC20(name, symbol) Ownable(creator) {
-        PLATFORM = msg.sender;
-        ASSET_ID = assetId;
-        
-        uint256 creatorShares = (TOTAL_SHARES * creatorSharesPercent) / 10000;
-        uint256 publicShares = TOTAL_SHARES - creatorShares;
-
-        allocation = ShareAllocation({
-            creatorShares: creatorShares,
-            publicShares: publicShares,
-            pricePerShare: pricePerShare,
-            saleActive: true
-        });
-        
-        _mint(creator, creatorShares);
-    }
-
-    function buyShares(uint256 shareAmount) external payable {
-        require(allocation.saleActive, "Sale not active");
-        require(shareAmount > 0, "Must buy at least 1 share");
-        require(shareAmount <= allocation.publicShares, "Not enough shares available");
-        require(msg.value >= shareAmount * allocation.pricePerShare, "Insufficient payment");
-        
-        allocation.publicShares -= shareAmount;
-        _mint(msg.sender, shareAmount);
-        
-        if (msg.value > shareAmount * allocation.pricePerShare) {
-            payable(msg.sender).transfer(msg.value - (shareAmount * allocation.pricePerShare));
-        }
-    }
-
-    function toggleSale() external onlyOwner {
-        allocation.saleActive = !allocation.saleActive;
-    }
-    
-    function updatePrice(uint256 newPrice) external onlyOwner {
-        allocation.pricePerShare = newPrice;
-    }
-    
-    function getRemainingShares() external view returns (uint256) {
-        return allocation.publicShares;
-    }
-}
 
 contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     IIPAssetRegistry public immutable IP_ASSET_REGISTRY;
@@ -119,7 +23,6 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     IPILicenseTemplate public immutable PIL_TEMPLATE;
     address public immutable ROYALTY_POLICY_LAP;
     address public immutable WIP;
-
     AssetNFT public immutable ASSET_NFT;
 
     enum AssetType { MUSIC, POETRY, DANCE, ART, VIDEO, WRITING, CODE, OTHER }
@@ -140,6 +43,7 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         VerificationStatus verificationStatus;
     }
 
+
     struct RoyaltyDistribution {
         uint256 totalAmount;
         uint256 timestamp;
@@ -153,6 +57,9 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         uint256 assetsCreated;
         bool isVerified;
         VerificationStatus verificationStatus;
+        string profilephotoIPFS;
+        string bio;
+        string platformName;
     }
 
     uint256 private _assetCounter;
@@ -216,10 +123,7 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         
         
         uint256 nftTokenId = ASSET_NFT.mint(address(this), nftMetadata);
-
-        // Register the NFT as an IP Asset
         address ipId = IP_ASSET_REGISTRY.register(block.chainid, address(ASSET_NFT), nftTokenId);
-        
         
         uint32 commercialRevShare = uint32(commercialRevSharePercent * 1_000_000); // Convert to basis points (1% = 1_000_000)
         
@@ -251,7 +155,6 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
             pricePerShare
         );
 
-        
         assets[assetId] = Asset({
             nftTokenId: nftTokenId,
             ipId: ipId,
@@ -267,7 +170,6 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
             verificationStatus: VerificationStatus.PENDING
         });
 
-        
         creators[msg.sender].wallet = msg.sender;
         creators[msg.sender].assetsCreated++;
         
@@ -307,14 +209,12 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         AssetShareToken shareToken = AssetShareToken(assets[assetId].shareTokenAddress);
         uint256 distributionAmount = assetRoyaltyBalance[assetId];
         
-       
         royaltyDistributions[assetId].push();
         uint256 distributionIndex = royaltyDistributions[assetId].length - 1;
         
         RoyaltyDistribution storage distribution = royaltyDistributions[assetId][distributionIndex];
         distribution.totalAmount = distributionAmount;
         distribution.timestamp = block.timestamp;
-        
         
         assetRoyaltyBalance[assetId] = 0;
     }
@@ -335,9 +235,7 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         
         require(userRoyaltyShare > 0, "No royalties to claim");
         
-       
         distribution.claimedAmounts[msg.sender] = userRoyaltyShare;
-        
         
         payable(msg.sender).transfer(userRoyaltyShare);
         
@@ -440,7 +338,50 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
             distribution.claimedAmounts[msg.sender]
         );
     }
-    
+
+    function updateCreatorProfileDetails(string memory _name, string memory _profilephotoIPFS, string memory _bio) external {
+        require(creators[msg.sender].wallet != address(0), "Creator does not exist");
+        creators[msg.sender].platformName = _name;
+        creators[msg.sender].profilephotoIPFS = _profilephotoIPFS;
+        creators[msg.sender].bio = _bio;
+    }
+
+    function registerCreator(
+        string memory _name, 
+        string memory _profilephotoIPFS, 
+        string memory _bio
+    ) external {
+        require(creators[msg.sender].wallet == address(0), "Creator already registered");
+        
+        CreatorProfile storage newCreator = creators[msg.sender];
+        newCreator.wallet = msg.sender;
+        newCreator.platformName = _name;
+        newCreator.profilephotoIPFS = _profilephotoIPFS;
+        newCreator.bio = _bio;
+        newCreator.assetsCreated = 0;
+        newCreator.isVerified = false;
+        newCreator.verificationStatus = VerificationStatus.PENDING;
+    }
+
+    function getCreatorBasicInfo(address creator) external view returns (
+        string memory name,
+        string memory photo,
+        string memory bio,
+        bool isVerified
+    ) {
+        CreatorProfile storage profile = creators[creator];
+        return (
+            profile.platformName,
+            profile.profilephotoIPFS,
+            profile.bio,
+            profile.isVerified
+        );
+    }
+
+    function isPlatformVerified(address creator, string memory platform) external view returns (bool) {
+        return creators[creator].platformVerified[platform];
+    }
+
     function pause() external onlyPlatformOwner {
         // Implement pause functionality if needed
     }
