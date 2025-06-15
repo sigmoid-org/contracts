@@ -17,8 +17,8 @@ contract AssetShareToken is ERC20, Ownable {
     address public immutable PLATFORM;
     uint256 public immutable ASSET_ID;
     uint256 public constant TOTAL_SHARES = 10000;
-    address[] private _holders;
-    mapping(address => bool) private _isHolder;
+    address[] public _holders;
+    mapping(address => bool) public _isHolder;
 
     struct ShareAllocation {
         uint256 creatorShares;
@@ -54,22 +54,27 @@ contract AssetShareToken is ERC20, Ownable {
         });
         
         _mint(creator, creatorShares);
+        _updateHolders(creator);
     }
 
     function buyShares(uint256 shareAmount, address sender) external payable {
         require(allocation.saleActive, "Sale not active");
         require(shareAmount > 0, "Must buy at least 1 share");
         require(shareAmount <= allocation.publicShares, "Not enough shares available");
-        require(msg.value >= shareAmount * allocation.pricePerShare, "Insufficient payment");
-
+        
+        uint256 totalCost = shareAmount * allocation.pricePerShare;
+        require(msg.value >= totalCost, "Insufficient payment");
+        
         allocation.publicShares -= shareAmount;
         _mint(sender, shareAmount);
         _updateHolders(sender);
-
-        if (msg.value > shareAmount * allocation.pricePerShare) {
-            payable(msg.sender).transfer(msg.value - (shareAmount * allocation.pricePerShare));
+        
+        payable(owner()).transfer(totalCost);
+        
+        if (msg.value > totalCost) {
+            payable(sender).transfer(msg.value - totalCost);
         }
-}
+    }
     function toggleSale() external onlyOwner {
         allocation.saleActive = !allocation.saleActive;
     }
@@ -118,10 +123,12 @@ contract AssetShareToken is ERC20, Ownable {
     }
 
     function _updateHolders(address to) internal {
-    if (!_isHolder[to] && balanceOf(to) > 0) {
+    // Remove the balance check - we know we're about to mint tokens
+    if (!_isHolder[to]) {
         _isHolder[to] = true;
         _holders.push(to);
     }
 }
 }
+
 

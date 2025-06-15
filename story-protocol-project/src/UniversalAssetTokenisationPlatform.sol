@@ -17,6 +17,11 @@ import "./AssetShareToken.sol";
 import "./utils/structs.sol";
 import "./utils/errors.sol";
 
+interface IAssetShareToken {
+    function TOTAL_SHARES() external view returns (uint256);
+    function getAllShareholders() external view returns (address[] memory holders, uint256[] memory balances);
+    // Add other necessary functions
+}
 
 contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     IIPAssetRegistry public immutable IP_ASSET_REGISTRY;
@@ -151,8 +156,6 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         if(assetId >= _assetCounter) revert InvalidInput();
         AssetShareToken shareToken = AssetShareToken(assets[assetId].shareTokenAddress);
         shareToken.buyShares{value: msg.value}(shareAmount, msg.sender);
-        address creator = shareToken.owner(); 
-        payable(creator).transfer(msg.value); 
         userToOwnedAssets[msg.sender].push(assetId);
         userToOwnedAssetsNFTIds[msg.sender].push(assets[assetId].nftTokenId);
     }
@@ -181,8 +184,8 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         
         AssetShareToken shareToken = AssetShareToken(assets[assetId].shareTokenAddress);
         uint256 distributionAmount = assetRoyaltyBalance[assetId];
-        uint256 totalShares = shareToken.TOTAL_SHARES();
-        
+        uint256 totalShares = shareToken.totalSupply();
+
         RoyaltyDistribution memory newDistribution = RoyaltyDistribution({
             totalAmount: distributionAmount,
             timestamp: block.timestamp,
@@ -195,10 +198,10 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         for (uint256 i = 0; i < holders.length; i++) {
             if (balances[i] > 0) {
                 uint256 userPortion = (distributionAmount * balances[i]) / totalShares;
+                if(userPortion == 0) revert InvalidInput();
                 userDistributions[assetId][distributionIndex][holders[i]] = userPortion;
             }
         }
-        
         distributionCount[assetId]++;
         assetRoyaltyBalance[assetId] = 0;
     }
