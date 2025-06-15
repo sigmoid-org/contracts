@@ -12,10 +12,10 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-
 import "./AssetNFT.sol";
 import "./AssetShareToken.sol";
 import "./utils/structs.sol";
+import "./utils/errors.sol";
 
 
 contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
@@ -25,16 +25,18 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     address public immutable ROYALTY_POLICY_LAP;
     address public immutable WIP;
     AssetNFT public immutable ASSET_NFT;
+
+    
     
     uint256 private _assetCounter;
-    mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public distributionClaims;
-    mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public distributionShares;
+    mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public userDistributions;
     mapping(uint256 => RoyaltyDistribution[]) public royaltyDistributions;
-
     mapping(uint256 => uint256) public distributionCount;
-    mapping(uint256 => Asset) public assets;
-    mapping(address => CreatorProfile) public creators;
     mapping(uint256 => uint256) public assetRoyaltyBalance;
+    mapping(uint256 => Asset) public assets;
+   
+
+    mapping(address => CreatorProfile) public creators;
     mapping(uint256 => mapping(address => bool)) private assetToAddressToVote;
     mapping(uint256 => address[]) public assetToVerifiers;
     mapping(address => address[]) public addressToReporters;
@@ -78,9 +80,9 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         uint256 pricePerShare,
         uint256 commercialRevSharePercent 
     ) external returns (uint256 assetId) {
-        require(creatorSharesPercent <= 9000, "Creator cannot own more than 90%");
-        require(creatorSharesPercent >= 1000, "Creator must own at least 10%");
-        require(commercialRevSharePercent <= 100, "Commercial rev share cannot exceed 100%");
+        if(creatorSharesPercent > 9000) revert InvalidInput();
+        if(creatorSharesPercent < 1000) revert InvalidInput();
+        if(commercialRevSharePercent > 100) revert InvalidInput();
 
         assetId = _assetCounter++;
         
@@ -104,9 +106,7 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
             })
         );
         
-        
         LICENSING_MODULE.attachLicenseTerms(ipId, address(PIL_TEMPLATE), licenseTermsId);
-        
         
         ASSET_NFT.transferFrom(address(this), msg.sender, nftTokenId);
         
@@ -148,7 +148,7 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     }
 
     function buyAssetShares(uint256 assetId, uint256 shareAmount) external payable nonReentrant {
-        require(assets[assetId].exists, "Asset does not exist");
+        if(assetId >= _assetCounter) revert InvalidInput();
         AssetShareToken shareToken = AssetShareToken(assets[assetId].shareTokenAddress);
         shareToken.buyShares{value: msg.value}(shareAmount, msg.sender);
         address creator = shareToken.owner(); 
@@ -158,8 +158,8 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     }
 
     function depositRoyalties(uint256 assetId) external payable nonReentrant {
-        require(assets[assetId].exists, "Asset does not exist");
-        require(msg.value > 0, "Must deposit some amount");
+        if(assetId >= _assetCounter) revert InvalidInput();
+        if(msg.value <= 0) revert InvalidInput();
         
         uint256 platformFee = (msg.value * platformFeePercent) / 10000;
         uint256 royaltyAmount = msg.value - platformFee;
@@ -176,51 +176,47 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     }
 
     function distributeRoyalties(uint256 assetId) external nonReentrant {
-        require(assets[assetId].exists, "Asset does not exist");
-        require(assetRoyaltyBalance[assetId] > 0, "No royalties to distribute");
+        if(assetId >= _assetCounter) revert InvalidInput();
+        if(assetRoyaltyBalance[assetId] <= 0) revert NoRoyaltiesToDistribute();
         
         AssetShareToken shareToken = AssetShareToken(assets[assetId].shareTokenAddress);
         uint256 distributionAmount = assetRoyaltyBalance[assetId];
         uint256 totalShares = shareToken.TOTAL_SHARES();
         
-        // Create new distribution with snapshot of total shares
         RoyaltyDistribution memory newDistribution = RoyaltyDistribution({
             totalAmount: distributionAmount,
             timestamp: block.timestamp,
             totalSharesAtDistribution: totalShares
         });
         
-        // Add to array
         royaltyDistributions[assetId].push(newDistribution);
         uint256 distributionIndex = royaltyDistributions[assetId].length - 1;
         (address[] memory holders, uint256[] memory balances) = shareToken.getAllShareholders();
         for (uint256 i = 0; i < holders.length; i++) {
             if (balances[i] > 0) {
-                distributionShares[assetId][distributionIndex][holders[i]] = balances[i];
+                uint256 userPortion = (distributionAmount * balances[i]) / totalShares;
+                userDistributions[assetId][distributionIndex][holders[i]] = userPortion;
             }
         }
+        
         distributionCount[assetId]++;
         assetRoyaltyBalance[assetId] = 0;
     }
+    
     function claimRoyalties(uint256 assetId, uint256 distributionIndex) external nonReentrant {
-        require(assets[assetId].exists, "Asset does not exist");
-        require(distributionIndex < royaltyDistributions[assetId].length, "Invalid distribution index");
-        require(distributionClaims[assetId][distributionIndex][msg.sender] == 0, "Already claimed");
-        uint256 userSharesAtDistribution = distributionShares[assetId][distributionIndex][msg.sender];
-        require(userSharesAtDistribution > 0, "No shares owned at distribution time");
-        RoyaltyDistribution storage distribution = royaltyDistributions[assetId][distributionIndex];
-        uint256 userPortion = (distribution.totalAmount * userSharesAtDistribution) / distribution.totalSharesAtDistribution;
-        require(userPortion > 0, "No royalties to claim");
-        distributionClaims[assetId][distributionIndex][msg.sender] = userPortion;
-        payable(msg.sender).transfer(userPortion);
+        if(assetId >= _assetCounter) revert InvalidInput();
+        if(distributionIndex >= royaltyDistributions[assetId].length) revert InvalidInput();
+        
+        uint256 claimableAmount = userDistributions[assetId][distributionIndex][msg.sender];
+        
+        require(claimableAmount > 0, "No royalties to claim or already claimed");
+        
+        // Set to 0 to mark as claimed
+        userDistributions[assetId][distributionIndex][msg.sender] = 0;
+        
+        payable(msg.sender).transfer(claimableAmount);
     }
-
-    struct RoyaltyDistributionView {
-        uint256 totalAmount;
-        uint256 timestamp;
-        uint256 claimedAmount;
-    }
-
+    
     function getAllDistributions(uint256 assetId) external view returns (
         uint256[] memory totalAmounts,
         uint256[] memory timestamps,
@@ -228,7 +224,7 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         uint256[] memory claimableAmounts,
         uint256 totalClaimable
     ) {
-        require(assets[assetId].exists, "Asset does not exist");
+        if(assetId >= _assetCounter) revert InvalidInput();
         
         uint256 length = royaltyDistributions[assetId].length;
         totalAmounts = new uint256[](length);
@@ -239,35 +235,18 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         
         for (uint256 i = 0; i < length; i++) {
             RoyaltyDistribution storage distribution = royaltyDistributions[assetId][i];
-            bool userClaimed = distributionClaims[assetId][i][msg.sender] > 0;
+            uint256 claimableAmount = userDistributions[assetId][i][msg.sender];
             
             totalAmounts[i] = distribution.totalAmount;
             timestamps[i] = distribution.timestamp;
-            claimed[i] = userClaimed;
-            
-            if (!userClaimed) {
-                uint256 userSharesAtDistribution = distributionShares[assetId][i][msg.sender];
-                if (userSharesAtDistribution > 0) {
-                    uint256 claimable = (distribution.totalAmount * userSharesAtDistribution) / distribution.totalSharesAtDistribution;
-                    claimableAmounts[i] = claimable;
-                    totalClaimable += claimable;
-                }
-            }
+            claimed[i] = (claimableAmount == 0);
+            claimableAmounts[i] = claimableAmount;
+            totalClaimable += claimableAmount;
         }
     }
-    
-    // function submitVerification(string memory platformUrl) external {
-    //     creators[msg.sender].verificationStatus = VerificationStatus.PENDING;
-    // }
-    
-    // function verifyCreator(address creator, string memory platform) external onlyPlatformOwner {
-    //     creators[creator].platformVerified[platform] = true;
-    //     creators[creator].verifiedPlatforms.push(platform);
-    //     creators[creator].isVerified = true;
-    // }
-    
+
     function updateAssetVerification(uint256 assetId, VerificationStatus status) external onlyPlatformOwner {
-        require(assets[assetId].exists, "Asset does not exist");
+        if(assetId >= _assetCounter) revert InvalidInput();
         assets[assetId].verificationStatus = status;
     }
 
@@ -276,30 +255,30 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     }
     
     function getAsset(uint256 assetId) external view returns (Asset memory, address[] memory verifiers) {
-        require(assets[assetId].exists, "Asset does not exist");
+        if(assetId >= _assetCounter) revert InvalidInput();
         address[] memory verifiers = assetToVerifiers[assetId];
         return (assets[assetId],verifiers); 
     }
     
-    function getCreatorAssets(address creator) external view returns (uint256[] memory) {
-        uint256 count = 0;
-        for (uint256 i = 0; i < _assetCounter; i++) {
-            if (assets[i].creator == creator) {
-                count++;
-            }
-        }
+    // function getCreatorAssets(address creator) external view returns (uint256[] memory) {
+    //     uint256 count = 0;
+    //     for (uint256 i = 0; i < _assetCounter; i++) {
+    //         if (assets[i].creator == creator) {
+    //             count++;
+    //         }
+    //     }
         
-        uint256[] memory creatorAssets = new uint256[](count);
-        uint256 index = 0;
-        for (uint256 i = 0; i < _assetCounter; i++) {
-            if (assets[i].creator == creator) {
-                creatorAssets[index] = i;
-                index++;
-            }
-        }
+    //     uint256[] memory creatorAssets = new uint256[](count);
+    //     uint256 index = 0;
+    //     for (uint256 i = 0; i < _assetCounter; i++) {
+    //         if (assets[i].creator == creator) {
+    //             creatorAssets[index] = i;
+    //             index++;
+    //         }
+    //     }
         
-        return creatorAssets;
-    }
+    //     return creatorAssets;
+    // }
     function hasVoted(uint256 assetId, address user) external view returns (bool) {
         return assetToAddressToVote[assetId][user];
     }
@@ -324,7 +303,7 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
     }
 
     function getUserShares(address user, uint256 assetId) external view returns (uint256) {
-        if (!assets[assetId].exists) return 0;
+        if(assetId >= _assetCounter) revert InvalidInput();
         AssetShareToken shareToken = AssetShareToken(assets[assetId].shareTokenAddress);
         return shareToken.balanceOf(user);
     }
@@ -366,34 +345,6 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
         if (assetType == AssetType.WRITING) return "WRITING";
         if (assetType == AssetType.CODE) return "CODE";
         return "OTHER";
-    }
-    
-
-    function getRoyaltyDistribution(uint256 assetId, uint256 distributionIndex) external view returns (
-        uint256 totalAmount,
-        uint256 timestamp,
-        bool claimed,
-        uint256 claimableAmount
-    ) {
-        require(distributionIndex < royaltyDistributions[assetId].length, "Invalid distribution index");
-        
-        RoyaltyDistribution storage distribution = royaltyDistributions[assetId][distributionIndex];
-        bool userClaimed = distributionClaims[assetId][distributionIndex][msg.sender] > 0;
-        
-        uint256 claimable = 0;
-        if (!userClaimed) {
-            uint256 userSharesAtDistribution = distributionShares[assetId][distributionIndex][msg.sender];
-            if (userSharesAtDistribution > 0) {
-                claimable = (distribution.totalAmount * userSharesAtDistribution) / distribution.totalSharesAtDistribution;
-            }
-        }
-        
-        return (
-            distribution.totalAmount,
-            distribution.timestamp,
-            userClaimed,
-            claimable
-        );
     }
 
 
@@ -453,21 +404,6 @@ contract UniversalAssetTokenizationPlatform is ERC721Holder, ReentrancyGuard {
             reporters
         );
     }
-
-    function isPlatformVerified(address creator, string memory platform) external view returns (bool) {
-        return creators[creator].platformVerified[platform];
-    }
-
-    function reportUser(address user) external {
-        for(uint256 i = 0; i < addressToReporters[msg.sender].length; i++) {
-            if(addressToReporters[msg.sender][i] == user) {
-                return;
-            }
-        }
-        addressToReported[msg.sender].push(user);
-        addressToReporters[user].push(msg.sender);
-    }
-
     function pause() external onlyPlatformOwner {
         // Implement pause functionality if needed
     }
