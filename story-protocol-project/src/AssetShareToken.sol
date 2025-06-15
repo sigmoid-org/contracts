@@ -17,6 +17,8 @@ contract AssetShareToken is ERC20, Ownable {
     address public immutable PLATFORM;
     uint256 public immutable ASSET_ID;
     uint256 public constant TOTAL_SHARES = 10000;
+    address[] private _holders;
+    mapping(address => bool) private _isHolder;
 
     struct ShareAllocation {
         uint256 creatorShares;
@@ -30,7 +32,6 @@ contract AssetShareToken is ERC20, Ownable {
         require(msg.sender == PLATFORM, "Only platform");
         _;
     }
-
     constructor(
         string memory name,
         string memory symbol,
@@ -55,20 +56,20 @@ contract AssetShareToken is ERC20, Ownable {
         _mint(creator, creatorShares);
     }
 
-    function buyShares(uint256 shareAmount) external payable {
+    function buyShares(uint256 shareAmount, address sender) external payable {
         require(allocation.saleActive, "Sale not active");
         require(shareAmount > 0, "Must buy at least 1 share");
         require(shareAmount <= allocation.publicShares, "Not enough shares available");
         require(msg.value >= shareAmount * allocation.pricePerShare, "Insufficient payment");
-        
+
         allocation.publicShares -= shareAmount;
-        _mint(msg.sender, shareAmount);
-        
+        _mint(sender, shareAmount);
+        _updateHolders(sender);
+
         if (msg.value > shareAmount * allocation.pricePerShare) {
             payable(msg.sender).transfer(msg.value - (shareAmount * allocation.pricePerShare));
         }
-    }
-
+}
     function toggleSale() external onlyOwner {
         allocation.saleActive = !allocation.saleActive;
     }
@@ -80,4 +81,47 @@ contract AssetShareToken is ERC20, Ownable {
     function getRemainingShares() external view returns (uint256) {
         return allocation.publicShares;
     }
+
+    function getContractDetails() external view returns (
+        address platform,
+        uint256 assetId,
+        uint256 totalShares,
+        string memory tokenName,
+        string memory tokenSymbol,
+        uint256 creatorShares,
+        uint256 publicShares,
+        uint256 pricePerShare,
+        bool saleActive
+    ) {
+        return (
+            PLATFORM,
+            ASSET_ID,
+            TOTAL_SHARES,
+            name(),
+            symbol(),
+            allocation.creatorShares,
+            allocation.publicShares,
+            allocation.pricePerShare,
+            allocation.saleActive
+        );
+    }
+
+    function getAllShareholders() external view returns (address[] memory holders, uint256[] memory balances) {
+        uint256 length = _holders.length;
+        holders = new address[](length);
+        balances = new uint256[](length);
+        
+        for (uint256 i = 0; i < length; i++) {
+            holders[i] = _holders[i];
+            balances[i] = balanceOf(_holders[i]);
+        }
+    }
+
+    function _updateHolders(address to) internal {
+    if (!_isHolder[to] && balanceOf(to) > 0) {
+        _isHolder[to] = true;
+        _holders.push(to);
+    }
 }
+}
+

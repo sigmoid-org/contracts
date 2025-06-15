@@ -5,6 +5,7 @@ via_ir = true
 libs = ['node_modules', 'lib']
 cache_path  = 'forge-cache'
 gas_reports = ["*"]
+gas_limit = 50000000
 optimizer = true
 optimizer_runs = 20000
 test = 'test'
